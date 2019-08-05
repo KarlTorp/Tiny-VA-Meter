@@ -3,15 +3,59 @@
 #include <Wire.h>
 // Using U8g2 2.24.3
 #include <U8g2lib.h>
-// Using Adafruit INA219 1.0.2
-// TODO update or change.
+// Using Adafruit INA219 1.0.5
 #include <Adafruit_INA219.h>
+
+#define SEC_PR_HOUR 3600
+
+#define MENU_MAIN 0
+#define MENU_VA 1
+#define MENU_P 2
+#define MENU_SETTINGS_ENTER 3
+#define MENU_SETTINGS_RANGE 4
+#define MENU_SETTINGS_REFRESH 5
+#define MENU_SETTINGS_SLEEP 6
+
+#define INA219_RANGE_32V_3A 0
+#define INA219_RANGE_32V_1A 1
+#define INA219_RANGE_16V_400mA 2
 
 const int BUTTON_PIN = 2;     // the number of the pushbutton pin
 const int LED_PIN =  13;      // the number of the LED pin
+const unsigned long LONG_PRESS_DURATION = 1000;
 
 Adafruit_INA219 ina219;
-U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);
+//U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, SCL, SDA);
+
+bool button_pressed = false;
+bool wait_for_button_release = false;
+unsigned long button_pressed_start = 0;
+unsigned long currentMillis = 0;
+unsigned long next_refresh = 0;
+unsigned long refresh_rate = 200;
+uint8_t current_menu = MENU_MAIN;
+uint8_t current_ina_range = INA219_RANGE_32V_3A;
+float mAh = 0;
+
+
+void print_two_lines(const char* line1, const char* line2)
+{
+  u8g2.clearBuffer();          // clear the internal memory  
+  u8g2.setCursor(0,14);
+  u8g2.print(line1);
+  u8g2.setCursor(0,32);
+  u8g2.print(line2);  
+  u8g2.sendBuffer();          // transfer internal memory to the display
+}
+
+void print_one_line(const char* line1)
+{
+  u8g2.clearBuffer();          // clear the internal memory  
+  u8g2.setCursor(0,14);
+  u8g2.print(line1);
+  u8g2.sendBuffer();          // transfer internal memory to the display
+}
 
 void setup(void) {
   // Initialize the LED_PIN as an output:
@@ -20,12 +64,11 @@ void setup(void) {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   // Initialize OLED
   u8g2.begin();
+  u8g2.setFont(u8g2_font_ncenB14_tr); // choose a suitable font
+  
   // Initialize Serial
   Serial.begin(115200);
-  while (!Serial) {
-      // will pause Zero, Leonardo, etc until serial console opens
-      delay(1);
-  }
+
   
   // Initialize the INA219.
   // By default the initialization will use the largest range (32V, 2A).  However
@@ -35,57 +78,164 @@ void setup(void) {
   //ina219.setCalibration_32V_1A();
   // Or to use a lower 16V, 400mA range (higher precision on volts and amps):
   //ina219.setCalibration_16V_400mA();
+}
 
-  Serial.println("Measuring voltage and current with INA219 ...");
+void long_press()
+{
+    switch(current_menu) {
+    case MENU_MAIN:
+      current_menu = MENU_VA;
+      break;
+    case MENU_VA:
+      break;
+    case MENU_P:
+      mAh = 0;
+      break;
+    case MENU_SETTINGS_ENTER:
+      current_menu = MENU_SETTINGS_RANGE;
+      break;
+    case MENU_SETTINGS_RANGE:
+      break;
+    case MENU_SETTINGS_REFRESH:
+      break;
+    case MENU_SETTINGS_SLEEP:
+      break;
+    default:
+      current_menu = MENU_MAIN;
+      break;
+  }
+}
+void short_press()
+{
+    switch(current_menu) {
+    case MENU_MAIN:
+      current_menu = MENU_VA;
+      break;
+    case MENU_VA:
+      current_menu = MENU_P;
+      break;
+    case MENU_P:
+      current_menu = MENU_SETTINGS_ENTER;
+      break;
+    case MENU_SETTINGS_ENTER:
+      current_menu = MENU_VA;
+      break;
+    case MENU_SETTINGS_RANGE:
+      current_menu = MENU_SETTINGS_REFRESH;
+      break;
+    case MENU_SETTINGS_REFRESH:
+      current_menu = MENU_SETTINGS_SLEEP;
+      break;
+    case MENU_SETTINGS_SLEEP:
+      current_menu = MENU_VA;
+      break;
+    default:
+      current_menu = MENU_MAIN;
+      break;
+  }
 }
 
 void read_button()
 {
-  int buttonState = digitalRead(BUTTON_PIN);
-
+  const int buttonState = digitalRead(BUTTON_PIN);
   // check if the pushbutton is pressed. If it is, the buttonState is LOW:
-  if (buttonState == LOW) {
-    // turn LED on:
+  if(buttonState == LOW) {
     digitalWrite(LED_PIN, HIGH);
+    if(button_pressed == true) {
+      if(!wait_for_button_release && (button_pressed_start + LONG_PRESS_DURATION < currentMillis)) {
+        wait_for_button_release = true;
+        long_press();
+      }
+    } else {
+      button_pressed_start = currentMillis;
+      button_pressed = true;
+    }
   } else {
-    // turn LED off:
     digitalWrite(LED_PIN, LOW);
+    if(button_pressed == true)
+    {
+      if(!wait_for_button_release){
+        short_press();
+      }
+    }
+    wait_for_button_release = false;
+    button_pressed = false;
   }
 }
 
 void update_screen()
 {
-  float shuntvoltage = 0;
-  float busvoltage = 0;
-  float current_mA = 0;
-  float loadvoltage = 0;
+  const float shuntvoltage = ina219.getShuntVoltage_mV();
+  const float busvoltage = ina219.getBusVoltage_V();
+  const float current_mA = ina219.getCurrent_mA();
+  const float loadvoltage = busvoltage + (shuntvoltage / 1000);
+  const float power_mw = ina219.getPower_mW();
 
-  shuntvoltage = ina219.getShuntVoltage_mV();
-  busvoltage = ina219.getBusVoltage_V();
-  current_mA = ina219.getCurrent_mA();
-  loadvoltage = busvoltage + (shuntvoltage / 1000);
+  const float samlpe_rate = (float)refresh_rate;
 
+  mAh += current_mA / ((1000/samlpe_rate) * SEC_PR_HOUR);
+  
+  switch(current_menu) {
+    case MENU_MAIN:
+      print_two_lines("Input range:", "0-32V 0-3.2A");
+      break;
+    case MENU_VA:
+    {
+      String volt = String(loadvoltage) + " V";
+      String amp = String(current_mA) + " mA";
+      print_two_lines(amp.c_str(), volt.c_str());
+    }
+      break;
+    case MENU_P:
+    {
+      String power = String(power_mw) + " mW";
+      String ampHours = String(mAh) + " mAh";
+      print_two_lines(power.c_str(), ampHours.c_str());
+    }
+      break;
+    case MENU_SETTINGS_ENTER:
+      print_one_line("Settings");
+      break;
+    case MENU_SETTINGS_RANGE:  
+      if(current_ina_range == INA219_RANGE_32V_3A) {
+        print_two_lines("Active range", "32V & 3.2A");
+      } else if(current_ina_range == INA219_RANGE_32V_1A) {
+        print_two_lines("Active range", "32V & 1A");
+      } else { // INA219_RANGE_16V_400mA
+        print_two_lines("Active range", "32V & 400mA");
+      }
+      break;
+    case MENU_SETTINGS_REFRESH:
+    {
+      String rate = String(refresh_rate) + " ms";
+      print_two_lines("Refresh rate", rate.c_str());
+    }
+      break;
+    case MENU_SETTINGS_SLEEP:
+      print_two_lines("Sensor sleep", "Disabled");
+      break;
+    default:
+      current_menu = MENU_MAIN;
+      break;
+  }
+  
+
+  Serial.print("Millis:        "); Serial.print(currentMillis); Serial.println(" ms");
   Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
   Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
   Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
   Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
+  Serial.print("Power:         "); Serial.print(power_mw); Serial.println(" mW");
+  Serial.print("Comsumption:   "); Serial.print(mAh); Serial.println(" mAh");
   Serial.println("");
-  
-  u8g2.clearBuffer();          // clear the internal memory
-  
-  u8g2.setFont(u8g2_font_ncenB14_tr); // choose a suitable font
-  u8g2.setCursor(0,14);
-  u8g2.print(current_mA);
-  u8g2.print(" mA");
-  u8g2.setCursor(0,32);
-  u8g2.print(loadvoltage);
-  u8g2.print(" V");
-  
-  u8g2.sendBuffer();          // transfer internal memory to the display
 }
 
 void loop(void) {
+  currentMillis = millis();
   read_button();
-  update_screen();
-  delay(100);  
+  if(next_refresh <= currentMillis){
+    next_refresh += refresh_rate;
+    update_screen();
+  }
 }
+
