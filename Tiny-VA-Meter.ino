@@ -16,6 +16,12 @@
 #define MENU_SETTINGS_REFRESH 5
 #define MENU_SETTINGS_SLEEP 6
 
+enum {
+  INA219_RANGE_32V_3A,
+  INA219_RANGE_32V_1A,
+  INA219_RANGE_16V_400mA
+};
+
 #define INA219_RANGE_32V_3A 0
 #define INA219_RANGE_32V_1A 1
 #define INA219_RANGE_16V_400mA 2
@@ -30,9 +36,10 @@ U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R2, /* reset=*/ U8X8_PIN_NONE, 
 
 bool button_pressed = false;
 bool wait_for_button_release = false;
+bool sensor_sleep = false;
 unsigned long button_pressed_start = 0;
 unsigned long currentMillis = 0;
-unsigned long next_refresh = 0;
+unsigned long last_refresh = 0;
 unsigned long refresh_rate = 200;
 uint8_t current_menu = MENU_MAIN;
 uint8_t current_ina_range = INA219_RANGE_32V_3A;
@@ -95,10 +102,33 @@ void long_press()
       current_menu = MENU_SETTINGS_RANGE;
       break;
     case MENU_SETTINGS_RANGE:
+    if(current_ina_range == INA219_RANGE_32V_3A) {
+      current_ina_range = INA219_RANGE_32V_1A;
+      ina219.setCalibration_32V_1A();
+    } else if(current_ina_range == INA219_RANGE_32V_1A) {
+      current_ina_range = INA219_RANGE_16V_400mA;
+      ina219.setCalibration_16V_400mA();
+    } else {
+      current_ina_range = INA219_RANGE_32V_3A;
+      ina219.setCalibration_32V_2A();
+    }    
       break;
     case MENU_SETTINGS_REFRESH:
+    if(refresh_rate == 100) {
+      refresh_rate = 200;
+    } else if(refresh_rate == 200) {
+      refresh_rate = 500;
+    } else if(refresh_rate == 500) {
+      refresh_rate = 1000;
+    } else {
+      refresh_rate = 100;
+    } 
       break;
     case MENU_SETTINGS_SLEEP:
+      sensor_sleep = !sensor_sleep;
+      if(!sensor_sleep){
+        ina219.powerSave(false);
+      }
       break;
     default:
       current_menu = MENU_MAIN;
@@ -165,11 +195,20 @@ void read_button()
 
 void update_screen()
 {
+  if(sensor_sleep) {
+    ina219.powerSave(false);
+    delay(2); // Allow sensor boot < 1 ms.
+  }
+  
   const float shuntvoltage = ina219.getShuntVoltage_mV();
   const float busvoltage = ina219.getBusVoltage_V();
   const float current_mA = ina219.getCurrent_mA();
   const float loadvoltage = busvoltage + (shuntvoltage / 1000);
   const float power_mw = ina219.getPower_mW();
+
+  if(sensor_sleep) {
+    ina219.powerSave(true);
+  }
 
   const float samlpe_rate = (float)refresh_rate;
 
@@ -178,6 +217,9 @@ void update_screen()
   switch(current_menu) {
     case MENU_MAIN:
       print_two_lines("Input range:", "0-32V 0-3.2A");
+      if(currentMillis >= 3000) {
+        current_menu = MENU_VA;
+      }
       break;
     case MENU_VA:
     {
@@ -202,7 +244,7 @@ void update_screen()
       } else if(current_ina_range == INA219_RANGE_32V_1A) {
         print_two_lines("Active range", "32V & 1A");
       } else { // INA219_RANGE_16V_400mA
-        print_two_lines("Active range", "32V & 400mA");
+        print_two_lines("Active range", "16V & 0.4A");
       }
       break;
     case MENU_SETTINGS_REFRESH:
@@ -212,7 +254,13 @@ void update_screen()
     }
       break;
     case MENU_SETTINGS_SLEEP:
-      print_two_lines("Sensor sleep", "Disabled");
+      if(sensor_sleep) {
+        print_two_lines("Sensor sleep", "Enabled");
+      } else {
+        print_two_lines("Sensor sleep", "Disabled");
+      }
+      
+
       break;
     default:
       current_menu = MENU_MAIN;
@@ -233,8 +281,8 @@ void update_screen()
 void loop(void) {
   currentMillis = millis();
   read_button();
-  if(next_refresh <= currentMillis){
-    next_refresh += refresh_rate;
+  if(last_refresh + refresh_rate <= currentMillis){
+    last_refresh += refresh_rate;
     update_screen();
   }
 }
