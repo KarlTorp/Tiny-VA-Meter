@@ -223,7 +223,7 @@ void update_screen()
       break;
     case MENU_VA:
     {
-      String volt = String(loadvoltage) + " V";
+      String volt = String(loadvoltage) + "/" + String(busvoltage) + " V";
       String amp = String(current_mA) + " mA";
       print_two_lines(amp.c_str(), volt.c_str());
     }
@@ -278,9 +278,44 @@ void update_screen()
   Serial.println("");
 }
 
+void receive_serial()
+{
+  String command;
+  if(Serial.available()){
+    command = Serial.readStringUntil('\n');
+     
+    if(command.equals("reset")){
+      mAh = 0;
+      Serial.println("mAh reset");
+    } else if(command.equals("sleep on")) {
+      sensor_sleep = true;
+      Serial.println("sleep on");
+    } else if(command.equals("sleep off")) {
+      sensor_sleep = false;
+      Serial.println("sleep off");
+    } else if(command.equals("refresh 100")) {
+      refresh_rate = 100;
+      Serial.println("refresh rate 100");
+    } else if(command.equals("refresh 200")) {
+      refresh_rate = 200;
+      Serial.println("refresh rate 200");
+    } else if(command.equals("refresh 500")) {
+      refresh_rate = 500;
+      Serial.println("refresh rate 500");
+    } else if(command.equals("refresh 1000")) {
+      refresh_rate = 1000;
+      Serial.println("refresh rate 1000");
+    } else {
+        Serial.println("Invalid command");
+    }
+  }
+}
+
+
 void loop(void) {
   currentMillis = millis();
   read_button();
+  receive_serial();
   if(last_refresh + refresh_rate <= currentMillis){
     last_refresh += refresh_rate;
     update_screen();
