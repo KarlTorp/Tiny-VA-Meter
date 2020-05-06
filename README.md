@@ -12,3 +12,13 @@ Features:
 - Print results on serial.
 - Change settings with serial commands.
 - Input detection with range feedback.
+
+BOM:
+- Arduino Nano
+- INA219 sensor board (compact purple board)
+- OLED 0.96" I2C 128X64 4-pin.
+- TTP223 Capacitive Touch Switch
+- Female Power Supply Jack Socket Mount
+- Male Power Supply Jack
+- Slide Switch 2 Position 6 Pin
+- 5 pin male & female connector (optional)
