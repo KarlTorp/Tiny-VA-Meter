@@ -1,4 +1,4 @@
-// Using Arduino 1.8.5
+// Using Arduino 1.8.10
 #include <Arduino.h>
 #include <Wire.h>
 // Using U8g2 2.24.3
@@ -233,9 +233,9 @@ void update_screen()
     case MENU_MAIN:
     power_select_known_state = digitalRead(POWER_SELECT_PIN);
     if(power_select_known_state == USB_POWER_INPUT_STATE)  {
-      print_two_lines("Input range:", "0-32V 0-3.2A");
+      print_two_lines("Input range:", "0-26V 3.2A");
     } else {
-      print_two_lines("Input range:", "3-15V 0-3.2A");
+      print_two_lines("Input range:", "3-15V 3.2A");
     }
       
       if(currentMillis >= power_select_change_time + 3000) {
@@ -271,9 +271,9 @@ void update_screen()
       break;
     case MENU_SETTINGS_RANGE: // Display active INA219 sensor range
       if(current_ina_range == INA219_RANGE_32V_3A) {
-        print_two_lines("Active range", "32V & 3.2A");
+        print_two_lines("Active range", "26V & 3.2A");
       } else if(current_ina_range == INA219_RANGE_32V_1A) {
-        print_two_lines("Active range", "32V & 1A");
+        print_two_lines("Active range", "26V & 1A");
       } else { // INA219_RANGE_16V_400mA
         print_two_lines("Active range", "16V & 0.4A");
       }
@@ -338,11 +338,11 @@ void receive_serial()
     } else if(command.equals("range 0")) {
       current_ina_range = INA219_RANGE_32V_3A;
       ina219.setCalibration_32V_2A();
-      Serial.println("range 32V 3.2A");
+      Serial.println("range 26V 3.2A");
     } else if(command.equals("range 1")) {
       current_ina_range = INA219_RANGE_32V_1A;
       ina219.setCalibration_32V_1A();
-      Serial.println("range 32V 1A");
+      Serial.println("range 26V 1A");
     } else if(command.equals("range 2")) {
       current_ina_range = INA219_RANGE_16V_400mA;
       ina219.setCalibration_16V_400mA();
