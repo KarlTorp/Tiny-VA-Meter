@@ -258,7 +258,7 @@ void update_screen()
       if(power_select_known_state == USB_POWER_INPUT_STATE)  {
         print_two_lines("Input range:", "0-26V 3.2A");
       } else {
-        print_two_lines("Input range:", "3-15V 3.2A");
+        print_two_lines("Input range:", "4-15V 3.2A");
       }
       
       if(currentMillis >= power_select_change_time + 3000) {
@@ -286,11 +286,11 @@ void update_screen()
       break;
     case MENU_SETTINGS_RANGE: // Display active INA219 sensor range
       if(current_ina_range == INA219_RANGE_32V_3A) {
-        print_two_lines("Active range", "26V & 3.2A");
+        print_two_lines("Sensor range", "26V & 3.2A");
       } else if(current_ina_range == INA219_RANGE_32V_1A) {
-        print_two_lines("Active range", "26V & 1A");
+        print_two_lines("Sensor range", "26V & 1A");
       } else { // INA219_RANGE_16V_400mA
-        print_two_lines("Active range", "16V & 0.4A");
+        print_two_lines("Sensor range", "16V & 0.4A");
       }
       break;
     case MENU_SETTINGS_REFRESH: // Display active refresh rate
