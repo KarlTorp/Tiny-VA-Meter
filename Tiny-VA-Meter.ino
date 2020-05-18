@@ -50,6 +50,7 @@ U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA);
 bool button_pressed = false;
 bool wait_for_button_release = false;
 bool sensor_sleep = false;
+bool serial_auto_send = true;
 unsigned long button_pressed_start = 0;
 unsigned long currentMillis = 0;
 unsigned long last_refresh = 0;
@@ -315,8 +316,9 @@ void update_screen()
 
     const float samlpe_rate = (float)refresh_rate;
     mAh += current_mA / ((1000/samlpe_rate) * SEC_PR_HOUR);
-
-    transmit_serial();
+    if(serial_auto_send) {
+      transmit_serial();
+    }
   }
   
   switch(current_menu) {
@@ -336,7 +338,7 @@ void update_screen()
     {
       String volt = String(loadvoltage) + " V";
       String amp = String(current_mA) + " mA";
-      print_two_lines(amp.c_str(), volt.c_str());
+      print_two_lines(volt.c_str(), amp.c_str());
     }
       break;
     case MENU_P: // Display voltage, amps, watt and Ah
@@ -345,7 +347,7 @@ void update_screen()
       String amp = String(current_mA) + " mA";
       String power = String(power_mw) + " mW";
       String ampHours = String(mAh) + " mAh";
-      print_four_lines(volt.c_str(),power.c_str(), amp.c_str(), ampHours.c_str());
+      print_four_lines(volt.c_str(), amp.c_str(), power.c_str(), ampHours.c_str());
     }
       break;
     case MENU_SETTINGS_ENTER:
@@ -401,43 +403,41 @@ void receive_serial()
     command = Serial.readStringUntil('\n');   
     if(command.equals("reset")){
       mAh = 0;
-      Serial.println("mAh reset");
     } else if(command.equals("sleep on")) {
       sensor_sleep = true;
-      Serial.println("sleep on");
     } else if(command.equals("sleep off")) {
       sensor_sleep = false;
-      Serial.println("sleep off");
     } else if(command.equals("refresh 100")) {
       refresh_rate = 100;
-      Serial.println("refresh rate 100");
     } else if(command.equals("refresh 200")) {
       refresh_rate = 200;
-      Serial.println("refresh rate 200");
     } else if(command.equals("refresh 500")) {
       refresh_rate = 500;
-      Serial.println("refresh rate 500");
     } else if(command.equals("refresh 1000")) {
       refresh_rate = 1000;
-      Serial.println("refresh rate 1000");
     } else if(command.equals("range 0")) {
       set_INA_range(INA219_RANGE_32V_3A);
-      Serial.println("range 26V 3.2A");
     } else if(command.equals("range 1")) {
       set_INA_range(INA219_RANGE_32V_1A);
-      Serial.println("range 26V 1A");
     } else if(command.equals("range 2")) {
       set_INA_range(INA219_RANGE_16V_400mA);
-      Serial.println("range 16V 0.4A");
+    } else if(command.equals("log off")) {
+      serial_auto_send = false;
+    } else if(command.equals("log on")) {
+      serial_auto_send = true;
+    } else if(command.equals("read")) {
+      transmit_serial();
     } else {
       Serial.println("Commands:");
-      Serial.println("- reset (reset mAh measurement)");
-      Serial.println("- sleep on (Enable INA219 sleep between samples - reduce leak current)");
-      Serial.println("- sleep off (Disable INA219 sleep between samples - fastest operation)");
+      Serial.println("- reset (reset mAh)");
+      Serial.println("- read (Reply with latest results)");
+      Serial.println("- log x (Auto tx of sampels - x can be on or off)");
+      Serial.println("- sleep x (INA219 sleep between samples - x can be on or off)");
       Serial.println("- refresh x (Set screen & serial refresh rate. x can be 100, 200, 500 or 1000)");
       Serial.println("- range x (Set INA219 range. x can be 0 for 3.2A, 1 for 1A or 2 for 0.4A)");
-      Serial.println("");
+      return;
     }
+    Serial.println("OK");
     update_eeprom_settings();
   }
 #endif
