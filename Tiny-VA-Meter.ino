@@ -7,6 +7,19 @@
 #include <Adafruit_INA219.h>
 
 #define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Free some memory.
+#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free some memory.
+
+#ifdef ENABLE_EEPROM_SETTINGS
+#include <EEPROM.h>
+#define EEPROM_SETTINGS_VALID 0x55 // Used to validate settings stored in EEPROM.
+enum {
+  EEPROM_VALIDATION_ADDR = 0,
+  EEPROM_INA_RANGE_ADDR = 1,
+  EEPROM_SENSOR_SLEEP_ADDR = 2,
+  EEPROM_REFRESH_RATE_H_ADDR = 3,
+  EEPROM_REFRESH_RATE_L_ADDR = 4
+};
+#endif
 
 enum {
   MENU_MAIN,
@@ -68,6 +81,8 @@ void setup(void)
   // Initialize Serial
   Serial.begin(115200);
 #endif
+
+  load_eeprom_settings();
 }
 
 void loop(void) 
@@ -79,11 +94,65 @@ void loop(void)
   check_power_source();
 }
 
+void load_eeprom_settings()
+{
+#ifdef ENABLE_EEPROM_SETTINGS
+  if(EEPROM.read(EEPROM_VALIDATION_ADDR) == EEPROM_SETTINGS_VALID){
+    set_INA_range(EEPROM.read(EEPROM_INA_RANGE_ADDR));
+    sensor_sleep = EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != 0;    
+    refresh_rate = (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) << 8;
+    refresh_rate += (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR); 
+  } else {
+    Serial.println("No settings in EEPROM");
+  }
+#endif
+}
+
+void update_eeprom_settings()
+{
+#ifdef ENABLE_EEPROM_SETTINGS
+  // Only write new values. Eeprom has a limited number of write operations.
+    if(EEPROM.read(EEPROM_VALIDATION_ADDR) != EEPROM_SETTINGS_VALID){
+      EEPROM.write(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
+    }
+    if(EEPROM.read(EEPROM_INA_RANGE_ADDR) != current_ina_range){
+      EEPROM.write(EEPROM_INA_RANGE_ADDR, current_ina_range);
+    }
+    if(EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != (uint8_t)sensor_sleep){
+      EEPROM.write(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
+    }
+    if(EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) != (refresh_rate >> 8) & 0xFF){
+      EEPROM.write(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
+    }
+    if(EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR) != refresh_rate & 0xFF){
+      EEPROM.write(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
+    }
+#endif
+}
+
 void check_power_source() 
 {
   if(power_select_known_state != digitalRead(POWER_SELECT_PIN)){
     current_menu = MENU_MAIN;
     power_select_change_time = currentMillis;
+  }
+}
+
+void set_INA_range(uint8_t range)
+{
+  current_ina_range = range;
+  switch(range){
+    case INA219_RANGE_16V_400mA:
+      ina219.setCalibration_16V_400mA();
+      break;
+    case INA219_RANGE_32V_1A:
+      ina219.setCalibration_32V_1A();
+      break;
+    case INA219_RANGE_32V_3A:
+    default:
+      current_ina_range = INA219_RANGE_32V_3A;
+      ina219.setCalibration_32V_2A();
+      break;
   }
 }
 
@@ -131,14 +200,11 @@ void long_press()
     break;
   case MENU_SETTINGS_RANGE:
     if(current_ina_range == INA219_RANGE_32V_3A) {
-      current_ina_range = INA219_RANGE_32V_1A;
-      ina219.setCalibration_32V_1A();
+      set_INA_range(INA219_RANGE_32V_1A);
     } else if(current_ina_range == INA219_RANGE_32V_1A) {
-      current_ina_range = INA219_RANGE_16V_400mA;
-      ina219.setCalibration_16V_400mA();
+      set_INA_range(INA219_RANGE_16V_400mA);
     } else {
-      current_ina_range = INA219_RANGE_32V_3A;
-      ina219.setCalibration_32V_2A();
+      set_INA_range(INA219_RANGE_32V_3A);
     }    
     break;
   case MENU_SETTINGS_REFRESH:
@@ -162,6 +228,7 @@ void long_press()
     current_menu = MENU_MAIN;
     break;
   }
+  update_eeprom_settings();
 }
 void short_press()
 {
@@ -354,16 +421,13 @@ void receive_serial()
       refresh_rate = 1000;
       Serial.println("refresh rate 1000");
     } else if(command.equals("range 0")) {
-      current_ina_range = INA219_RANGE_32V_3A;
-      ina219.setCalibration_32V_2A();
+      set_INA_range(INA219_RANGE_32V_3A);
       Serial.println("range 26V 3.2A");
     } else if(command.equals("range 1")) {
-      current_ina_range = INA219_RANGE_32V_1A;
-      ina219.setCalibration_32V_1A();
+      set_INA_range(INA219_RANGE_32V_1A);
       Serial.println("range 26V 1A");
     } else if(command.equals("range 2")) {
-      current_ina_range = INA219_RANGE_16V_400mA;
-      ina219.setCalibration_16V_400mA();
+      set_INA_range(INA219_RANGE_16V_400mA);
       Serial.println("range 16V 0.4A");
     } else {
       Serial.println("Commands:");
@@ -374,6 +438,7 @@ void receive_serial()
       Serial.println("- range x (Set INA219 range. x can be 0 for 3.2A, 1 for 1A or 2 for 0.4A)");
       Serial.println("");
     }
+    update_eeprom_settings();
   }
 #endif
 }
