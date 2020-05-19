@@ -242,7 +242,7 @@ void short_press()
     current_menu = MENU_P;
     break;
   case MENU_P:
-    u8g2.setFont(u8g2_font_ncenB14_tf);
+    u8g2.setFont(u8g2_font_ncenB14_tr);
     current_menu = MENU_SETTINGS_ENTER;
     break;
   case MENU_SETTINGS_ENTER:
