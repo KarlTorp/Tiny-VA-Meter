@@ -5,6 +5,7 @@
 #include <U8g2lib.h>
 // Using Adafruit INA219 1.0.5
 #include <Adafruit_INA219.h>
+#include "FlashMem.h"
 
 #define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Free some memory.
 #define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free some memory.
@@ -428,13 +429,13 @@ void receive_serial()
     } else if(command.equals("read")) {
       transmit_serial();
     } else {
-      Serial.println("Commands:");
-      Serial.println("- reset (reset mAh)");
-      Serial.println("- read (Reply with latest results)");
-      Serial.println("- log x (Auto tx of sampels - x can be on or off)");
-      Serial.println("- sleep x (INA219 sleep between samples - x can be on or off)");
-      Serial.println("- refresh x (Set screen & serial refresh rate. x can be 100, 200, 500 or 1000)");
-      Serial.println("- range x (Set INA219 range. x can be 0 for 3.2A, 1 for 1A or 2 for 0.4A)");
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_HEAD));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_RESET));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_READ));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_LOG));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_SLEEP));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_REFRESH));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_RANGE));
       return;
     }
     Serial.println("OK");
