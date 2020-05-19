@@ -158,6 +158,28 @@ void set_INA_range(uint8_t range)
   }
 }
 
+void display_power_icon(){
+  if(power_select_known_state == USB_POWER_INPUT_STATE) {
+    u8g2.drawXBMP(46, 2, USB_icon_width, USB_icon_height, USB_icon_bits);
+  } else { 
+    u8g2.drawXBMP(30, 2, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);     
+  }  
+}
+
+void display_input_range()
+{  
+  u8g2.firstPage();
+  do {
+    display_power_icon();
+    u8g2.drawStr(0,32,"Input range:");
+    if(power_select_known_state == USB_POWER_INPUT_STATE)  {
+      u8g2.drawStr(0,63,"0-26V 3.2A");
+    } else {
+      u8g2.drawStr(0,63,"4-15V 3.2A");     
+    }
+  } while ( u8g2.nextPage() );
+}
+
 void print_four_lines(const char* line1, const char* line2, const char* line3, const char* line4)
 {
   u8g2.firstPage();
@@ -173,16 +195,18 @@ void print_two_lines(const char* line1, const char* line2)
 {
   u8g2.firstPage();
   do {
-    u8g2.drawStr(0,20,line1);
-    u8g2.drawStr(0,40,line2);
+    u8g2.drawStr(0,24,line1);
+    u8g2.drawStr(0,52,line2);
   } while ( u8g2.nextPage() );
 }
 
-void print_one_line(const char* line1)
+void display_settings()
 {
   u8g2.firstPage();
   do {
-    u8g2.drawStr(0,20,line1);
+    u8g2.setFont(u8g2_font_ncenB14_tr);
+    u8g2.drawStr(24,32,"Settings");
+    display_power_icon(); 
   } while ( u8g2.nextPage() );
 }
 
@@ -325,12 +349,7 @@ void update_screen()
   switch(current_menu) {
     case MENU_MAIN:
       power_select_known_state = digitalRead(POWER_SELECT_PIN);
-      if(power_select_known_state == USB_POWER_INPUT_STATE)  {
-        print_two_lines("Input range:", "0-26V 3.2A");
-      } else {
-        print_two_lines("Input range:", "4-15V 3.2A");
-      }
-      
+      display_input_range();
       if(currentMillis >= power_select_change_time + 3000) {
         short_press();
       }
@@ -352,7 +371,7 @@ void update_screen()
     }
       break;
     case MENU_SETTINGS_ENTER:
-      print_one_line("Settings");
+      display_settings();
       break;
     case MENU_SETTINGS_RANGE: // Display active INA219 sensor range
       if(current_ina_range == INA219_RANGE_32V_3A) {
