@@ -25,6 +25,8 @@ static const unsigned char PROGMEM USB_icon_bits[] = {
    0x00, 0x00, 0xfc, 0x01, 0x00, 0x00, 0xc0, 0x01 
 };
 
+#ifdef ENABLE_TERMINAL
+
 const char terminal_help_head[] PROGMEM =     {"Commands:"};
 const char terminal_help_reset[] PROGMEM =    {"- reset (Reset mAh)"};
 const char terminal_help_read[] PROGMEM =     {"- read (Reply with latest results)"};
@@ -58,3 +60,5 @@ char buffer[80]; // Must be able to hold longest flash text string.
 char* getFlashString(int i){
   strcpy_P(buffer, (char*)pgm_read_word(&(string_table[i])));
 }
+
+#endif

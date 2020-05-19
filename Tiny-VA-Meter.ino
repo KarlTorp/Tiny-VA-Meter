@@ -5,10 +5,12 @@
 #include <U8g2lib.h>
 // Using Adafruit INA219 1.0.5
 #include <Adafruit_INA219.h>
-#include "FlashMem.h"
 
-#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Free some memory.
-#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free some memory.
+#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
+#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
+#define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
+
+#include "FlashMem.h"
 
 #ifdef ENABLE_EEPROM_SETTINGS
 #include <EEPROM.h>
@@ -74,7 +76,6 @@ void setup(void)
   pinMode(POWER_SELECT_PIN, INPUT_PULLUP);
   // Initialize OLED
   u8g2.begin();
-  u8g2.setFont(u8g2_font_ncenB14_tr); // choose a suitable font
 
   // Initializ INA219
   ina219.begin();
@@ -158,24 +159,18 @@ void set_INA_range(uint8_t range)
   }
 }
 
-void display_power_icon(){
-  if(power_select_known_state == USB_POWER_INPUT_STATE) {
-    u8g2.drawXBMP(46, 2, USB_icon_width, USB_icon_height, USB_icon_bits);
-  } else { 
-    u8g2.drawXBMP(30, 2, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);     
-  }  
-}
-
 void display_input_range()
 {  
   u8g2.firstPage();
+  u8g2.setFont(u8g2_font_ncenB14_tr);
   do {
-    display_power_icon();
     u8g2.drawStr(0,32,"Input range:");
     if(power_select_known_state == USB_POWER_INPUT_STATE)  {
-      u8g2.drawStr(0,63,"0-26V 3.2A");
+      u8g2.drawXBMP(46, 2, USB_icon_width, USB_icon_height, USB_icon_bits);
+      u8g2.drawStr(0,56,"0-26V 3.2A");
     } else {
-      u8g2.drawStr(0,63,"4-15V 3.2A");     
+      u8g2.drawXBMP(30, 2, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);
+      u8g2.drawStr(0,56,"4-15V 3.2A");     
     }
   } while ( u8g2.nextPage() );
 }
@@ -183,6 +178,7 @@ void display_input_range()
 void print_four_lines(const char* line1, const char* line2, const char* line3, const char* line4)
 {
   u8g2.firstPage();
+  u8g2.setFont(u8g2_font_ncenB12_tr);
   do {
     u8g2.drawStr(0,15,line1);
     u8g2.drawStr(0,31,line2);
@@ -194,6 +190,7 @@ void print_four_lines(const char* line1, const char* line2, const char* line3, c
 void print_two_lines(const char* line1, const char* line2)
 {
   u8g2.firstPage();
+  u8g2.setFont(u8g2_font_ncenB14_tr);
   do {
     u8g2.drawStr(0,24,line1);
     u8g2.drawStr(0,52,line2);
@@ -205,8 +202,33 @@ void display_settings()
   u8g2.firstPage();
   do {
     u8g2.setFont(u8g2_font_ncenB14_tr);
-    u8g2.drawStr(24,32,"Settings");
-    display_power_icon(); 
+    u8g2.drawStr(22,16,"Settings");
+
+  if(power_select_known_state == USB_POWER_INPUT_STATE) {
+    u8g2.drawXBMP(46, 22, USB_icon_width, USB_icon_height, USB_icon_bits);
+  } else { 
+    u8g2.drawXBMP(30, 22, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);     
+  }  
+#ifdef ENABLE_SETTINGS_OVERVIEW
+    String rate = "Refresh rate: " + String(refresh_rate) + " ms";
+    String text = "Sensor range: ";
+    if(current_ina_range == INA219_RANGE_32V_3A) {
+      text += "26V & 3.2A";
+    } else if(current_ina_range == INA219_RANGE_32V_1A) {
+      text += "26V & 1A";
+    } else { // INA219_RANGE_16V_400mA
+      text += "16V & 0.4A";
+    }
+
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(0,46, text.c_str());
+    if(sensor_sleep) {
+      u8g2.drawStr(0,54, "Sensor sleep: Enabled");
+    } else {
+      u8g2.drawStr(0,54, "Sensor sleep: Disabled");
+    }   
+    u8g2.drawStr(0,62, rate.c_str());
+#endif
   } while ( u8g2.nextPage() );
 }
 
@@ -263,11 +285,9 @@ void short_press()
     current_menu = MENU_VA;
     break;
   case MENU_VA:
-    u8g2.setFont(u8g2_font_ncenB12_tr);
     current_menu = MENU_P;
     break;
   case MENU_P:
-    u8g2.setFont(u8g2_font_ncenB14_tr);
     current_menu = MENU_SETTINGS_ENTER;
     break;
   case MENU_SETTINGS_ENTER:
