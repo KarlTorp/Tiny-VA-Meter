@@ -9,6 +9,7 @@ Features:
 - Select INA219 ranges 32V/3.2A, 32V/1A or 16V/0.4A
 - Select sampling rate 100, 200, 500 or 1000 ms.
 - Enable/disable sensor sleep to lower leak current in sensor.
+- Settings are stored in EEPROM and reloaded on boot
 - Print results on serial.
 - Change settings with serial commands.
 - Input detection with range feedback.
@@ -22,3 +23,6 @@ BOM:
 - Male Power Supply Jack
 - Slide Switch 2 Position 6 Pin
 - 5 pin male & female connector (optional)
+
+Find guide and more here:
+https://www.instructables.com/id/Tiny-VA-Meter-With-INA219/
