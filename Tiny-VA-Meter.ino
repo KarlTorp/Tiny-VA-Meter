@@ -6,8 +6,8 @@
 // Using ArduinoINA219 fork from KarlTorp GitHub
 #include <INA219.h>
 
-#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
-#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
+//#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
+//#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
 #define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
 
 #include "FlashMem.h"
@@ -29,7 +29,9 @@ enum {
   MENU_VA,
   MENU_P,
   MENU_SETTINGS_ENTER,
-  MENU_SETTINGS_RANGE,
+  MENU_SETTINGS_RANGE_V,
+  MENU_SETTINGS_RANGE_I,
+  MENU_SETTINGS_AVERAGING,
   MENU_SETTINGS_REFRESH,
   MENU_SETTINGS_SLEEP
 };
@@ -250,15 +252,7 @@ void display_settings()
   }  
 #ifdef ENABLE_SETTINGS_OVERVIEW
     String rate = "Refresh rate: " + String(refresh_rate) + " ms";
-    String text = "Sensor range: ";
-    if(current_ina_range == INA219_RANGE_32V_3A) {
-      text += "26V & 3.2A";
-    } else if(current_ina_range == INA219_RANGE_32V_1A) {
-      text += "26V & 1A";
-    } else { // INA219_RANGE_16V_400mA
-      text += "16V & 0.4A";
-    }
-
+    String text = "Sensor range: " + String(current_ina_calibration.v_bus_max,0) + "V & " + String(current_ina_calibration.i_bus_max_expected,1) + "A";
     u8g2.setFont(u8g2_font_5x7_tf);
     u8g2.drawStr(0,46, text.c_str());
     if(sensor_sleep) {
@@ -269,6 +263,34 @@ void display_settings()
     u8g2.drawStr(0,62, rate.c_str());
 #endif
   } while ( u8g2.nextPage() );
+}
+
+void set_voltage_range(INA219::t_range range)
+{
+  current_ina_config.range = range;
+  if(range == INA219::RANGE_32V) {
+    current_ina_calibration.v_bus_max = 32;
+  } else {
+    current_ina_calibration.v_bus_max = 16;
+  }
+}
+
+void set_current_range(INA219::t_gain gain)
+{
+  current_ina_config.gain = gain;
+    if(current_ina_config.gain == INA219::GAIN_1_40MV)  {
+      current_ina_calibration.v_shunt_max = 0.04;
+      current_ina_calibration.i_bus_max_expected = 0.4;
+    } else if(current_ina_config.gain == INA219::GAIN_2_80MV)  {
+      current_ina_calibration.v_shunt_max = 0.08;
+      current_ina_calibration.i_bus_max_expected = 0.8;
+    } else if(current_ina_config.gain == INA219::GAIN_4_160MV)  {
+      current_ina_calibration.v_shunt_max = 0.16;
+      current_ina_calibration.i_bus_max_expected = 1.6;
+    } else {
+      current_ina_calibration.v_shunt_max = 0.320;
+      current_ina_calibration.i_bus_max_expected = 3.2;
+    }
 }
 
 void long_press()
@@ -283,16 +305,36 @@ void long_press()
     mAh = 0;
     break;
   case MENU_SETTINGS_ENTER:
-    current_menu = MENU_SETTINGS_RANGE;
+    current_menu = MENU_SETTINGS_RANGE_V;
     break;
-  case MENU_SETTINGS_RANGE:
-    if(current_ina_range == INA219_RANGE_32V_3A) {
-      set_INA_range(INA219_RANGE_32V_1A);
-    } else if(current_ina_range == INA219_RANGE_32V_1A) {
-      set_INA_range(INA219_RANGE_16V_400mA);
+  case MENU_SETTINGS_RANGE_V:
+    if(current_ina_config.range == INA219::RANGE_16V) {
+      set_voltage_range(INA219::RANGE_32V);
     } else {
-      set_INA_range(INA219_RANGE_32V_3A);
-    }    
+      set_voltage_range(INA219::RANGE_16V);
+    }
+    break;
+  case MENU_SETTINGS_RANGE_I:
+    if(current_ina_config.gain == INA219::GAIN_1_40MV)  {
+      set_current_range(INA219::GAIN_2_80MV);
+    } else if(current_ina_config.gain == INA219::GAIN_2_80MV)  {
+      set_current_range(INA219::GAIN_4_160MV);
+    } else if(current_ina_config.gain == INA219::GAIN_4_160MV)  {
+      set_current_range(INA219::GAIN_8_320MV);
+    } else {
+      set_current_range(INA219::GAIN_1_40MV);
+    } 
+    break;
+  case MENU_SETTINGS_AVERAGING:
+    if(current_ina_config.shunt_adc == INA219::ADC_128SAMP) {
+      current_ina_config.shunt_adc = INA219::ADC_12BIT;
+    } else if(current_ina_config.shunt_adc == INA219::ADC_12BIT) {
+      current_ina_config.shunt_adc = INA219::ADC_2SAMP;
+    } else {
+      uint8_t current = current_ina_config.shunt_adc + 1;
+      current_ina_config.shunt_adc = (INA219::t_adc)current;
+    }
+    current_ina_config.bus_adc = current_ina_config.shunt_adc;
     break;
   case MENU_SETTINGS_REFRESH:
     if(refresh_rate == 100) {
@@ -309,13 +351,13 @@ void long_press()
     sensor_sleep = !sensor_sleep;
     if(!sensor_sleep){
       current_ina_config.mode = INA219::CONT_SH_BUS;
-      update_ina_config();
     }
     break;
   default:
     current_menu = MENU_MAIN;
     break;
   }
+  update_ina_config();
   update_eeprom_settings();
 }
 void short_press()
@@ -333,7 +375,13 @@ void short_press()
   case MENU_SETTINGS_ENTER:
     current_menu = MENU_VA;
     break;
-  case MENU_SETTINGS_RANGE:
+  case MENU_SETTINGS_RANGE_V:
+    current_menu = MENU_SETTINGS_RANGE_I;
+    break;
+  case MENU_SETTINGS_RANGE_I:
+    current_menu = MENU_SETTINGS_AVERAGING;
+    break;
+  case MENU_SETTINGS_AVERAGING:
     current_menu = MENU_SETTINGS_REFRESH;
     break;
   case MENU_SETTINGS_REFRESH:
@@ -419,30 +467,45 @@ void update_screen()
     case MENU_VA: // Display voltage and amps
     {
       String volt = String(loadvoltage) + " V";
-      String amp = String(current_mA) + " mA";
+      String amp = String(current_mA, 1) + " mA";
       print_two_lines(volt.c_str(), amp.c_str());
     }
       break;
     case MENU_P: // Display voltage, amps, watt and Ah
     {
       String volt = String(loadvoltage) + " V";
-      String amp = String(current_mA) + " mA";
+      String amp = String(current_mA, 1) + " mA";
       String power = String(power_mw) + " mW";
-      String ampHours = String(mAh) + " mAh";
+      String ampHours = String(mAh, 1) + " mAh";
       print_four_lines(volt.c_str(), amp.c_str(), power.c_str(), ampHours.c_str());
     }
       break;
     case MENU_SETTINGS_ENTER:
       display_settings();
       break;
-    case MENU_SETTINGS_RANGE: // Display active INA219 sensor range
-      if(current_ina_range == INA219_RANGE_32V_3A) {
-        print_two_lines("Sensor range", "26V & 3.2A");
-      } else if(current_ina_range == INA219_RANGE_32V_1A) {
-        print_two_lines("Sensor range", "26V & 1A");
-      } else { // INA219_RANGE_16V_400mA
-        print_two_lines("Sensor range", "16V & 0.4A");
+    case MENU_SETTINGS_RANGE_V:
+    {
+       String volt = String(current_ina_calibration.v_bus_max,0) + " V";
+       print_two_lines("Range Volt", volt.c_str());
+    }   
+       break;
+    case MENU_SETTINGS_RANGE_I:
+    {
+       String amp = String(current_ina_calibration.i_bus_max_expected,1) + " A";
+       print_two_lines("Range Amp", amp.c_str());
+    }   
+      break;
+    case MENU_SETTINGS_AVERAGING:
+    {
+      String number;
+      if(current_ina_config.shunt_adc < INA219::ADC_2SAMP) {
+        number = "Off";
+      } else {
+        uint8_t samlpes = 1 << ((uint8_t)current_ina_config.shunt_adc - 8);
+        number = String(samlpes) + " samples";
       }
+      print_two_lines("Averaging", number.c_str());
+    } 
       break;
     case MENU_SETTINGS_REFRESH: // Display active refresh rate
       {
