@@ -7,7 +7,7 @@
 #include <INA219.h>
 
 //#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
-//#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
+#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
 #define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
 
 #include "FlashMem.h"
@@ -15,13 +15,15 @@
 
 #ifdef ENABLE_EEPROM_SETTINGS
 #include <EEPROM.h>
-#define EEPROM_SETTINGS_VALID 0x55 // Used to validate settings stored in EEPROM.
+#define EEPROM_SETTINGS_VALID 0x56 // Used to validate settings stored in EEPROM.
 enum {
   EEPROM_VALIDATION_ADDR = 0,
-  EEPROM_INA_RANGE_ADDR = 1,
-  EEPROM_SENSOR_SLEEP_ADDR = 2,
-  EEPROM_REFRESH_RATE_H_ADDR = 3,
-  EEPROM_REFRESH_RATE_L_ADDR = 4
+  EEPROM_INA_RANGE_V_ADDR,
+  EEPROM_INA_RANGE_I_ADDR,
+  EEPROM_INA_AVERAGING_ADDR,
+  EEPROM_SENSOR_SLEEP_ADDR,
+  EEPROM_REFRESH_RATE_H_ADDR,
+  EEPROM_REFRESH_RATE_L_ADDR,
 };
 #endif
 
@@ -97,10 +99,8 @@ void setup(void)
 #endif
   // Initializ INA219
   ina219.begin();
-  current_ina_config.bus_adc = INA219::ADC_12BIT;
-  current_ina_config.shunt_adc = INA219::ADC_12BIT;
-  current_ina_config.mode = INA219::CONT_SH_BUS;
-  load_eeprom_settings();
+  load_settings();
+  update_ina_config();
 }
 
 void loop(void) 
@@ -132,43 +132,38 @@ void read_button()
   }
 }
 
-void load_eeprom_settings()
+void load_settings()
 {
+  current_ina_config.mode = INA219::CONT_SH_BUS;
 #ifdef ENABLE_EEPROM_SETTINGS
   if(EEPROM.read(EEPROM_VALIDATION_ADDR) == EEPROM_SETTINGS_VALID){
-    set_INA_range(EEPROM.read(EEPROM_INA_RANGE_ADDR));
+    set_voltage_range((INA219::t_range)EEPROM.read(EEPROM_INA_RANGE_V_ADDR));
+    set_current_range((INA219::t_gain)EEPROM.read(EEPROM_INA_RANGE_I_ADDR));
+    current_ina_config.shunt_adc = (INA219::t_adc)EEPROM.read(EEPROM_INA_AVERAGING_ADDR);
+    current_ina_config.bus_adc = current_ina_config.shunt_adc;
     sensor_sleep = EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != 0;    
     refresh_rate = (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) << 8;
     refresh_rate += (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR); 
     return;
   } 
 #endif
-  current_ina_config.range = INA219::RANGE_32V;
-  current_ina_config.gain = INA219::GAIN_8_320MV;
-  current_ina_calibration.v_shunt_max = 0.32;
-  current_ina_calibration.v_bus_max = 32;
-  current_ina_calibration.i_bus_max_expected = 2.0;
+  current_ina_config.bus_adc = INA219::ADC_12BIT;
+  current_ina_config.shunt_adc = INA219::ADC_12BIT;
+  set_voltage_range(INA219::RANGE_32V);
+  set_current_range(INA219::GAIN_8_320MV);
 }
 
 void update_eeprom_settings()
 {
 #ifdef ENABLE_EEPROM_SETTINGS
   // Only write new values. Eeprom has a limited number of write operations.
-    if(EEPROM.read(EEPROM_VALIDATION_ADDR) != EEPROM_SETTINGS_VALID){
-      EEPROM.write(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
-    }
-    if(EEPROM.read(EEPROM_INA_RANGE_ADDR) != current_ina_range){
-      EEPROM.write(EEPROM_INA_RANGE_ADDR, current_ina_range);
-    }
-    if(EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != (uint8_t)sensor_sleep){
-      EEPROM.write(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
-    }
-    if(EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) != (refresh_rate >> 8) & 0xFF){
-      EEPROM.write(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
-    }
-    if(EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR) != refresh_rate & 0xFF){
-      EEPROM.write(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
-    }
+  EEPROM.update(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
+  EEPROM.update(EEPROM_INA_RANGE_V_ADDR, current_ina_config.range);  
+  EEPROM.update(EEPROM_INA_RANGE_I_ADDR, current_ina_config.gain);
+  EEPROM.update(EEPROM_INA_AVERAGING_ADDR, current_ina_config.shunt_adc);
+  EEPROM.update(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
+  EEPROM.update(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
+  EEPROM.update(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
 #endif
 }
 
