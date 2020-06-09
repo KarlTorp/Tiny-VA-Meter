@@ -11,6 +11,7 @@
 #define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
 
 #include "FlashMem.h"
+#include "button.hpp"
 
 #ifdef ENABLE_EEPROM_SETTINGS
 #include <EEPROM.h>
@@ -36,12 +37,6 @@ enum {
   MENU_SETTINGS_SLEEP
 };
 
-enum {
-  INA219_RANGE_32V_3A = 0,
-  INA219_RANGE_32V_1A = 1,
-  INA219_RANGE_16V_400mA = 2
-};
-
 struct Ina_config_settings {
   INA219::t_range range;
   INA219::t_gain gain;
@@ -62,24 +57,24 @@ struct Ina_calibration_settings {
 #define BUTTON_PRESSED_STATE HIGH // Active state for button
 #define USB_POWER_INPUT_STATE HIGH // Input pin state for USB powered
 #define LONG_PRESS_DURATION 1000  // ms.
+#define DEBOUNCE_DURATION 50 // ms.
 #define SEC_PR_HOUR 3600
 #define R_SHUNT 0.1
 
 INA219 ina219;
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA);
+BUTTON button(BUTTON_PIN, true, BUTTON_PRESSED_STATE, LONG_PRESS_DURATION, DEBOUNCE_DURATION);
 
 Ina_config_settings current_ina_config;
 Ina_calibration_settings current_ina_calibration;
-bool button_pressed = false;
-bool wait_for_button_release = false;
+
 bool sensor_sleep = false;
 bool serial_auto_send = true;
-unsigned long button_pressed_start = 0;
+bool wait_for_lp_release = false;
 unsigned long currentMillis = 0;
 unsigned long last_refresh = 0;
 unsigned long refresh_rate = 200;
 uint8_t current_menu = MENU_MAIN;
-uint8_t current_ina_range = INA219_RANGE_32V_3A;
 float mAh = 0;
 int power_select_known_state = 0;
 unsigned long power_select_change_time = 0;
@@ -91,8 +86,7 @@ float power_mw = 0;
 
 void setup(void) 
 {
-  // Configure pin BUTTON_PIN & POWER_SELECT_PIN as inputs and enable the internal pull-up resistor
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // Configure pin POWER_SELECT_PIN as inputs and enable the internal pull-up resistor
   pinMode(POWER_SELECT_PIN, INPUT_PULLUP);
   // Initialize OLED
   u8g2.begin();
@@ -118,6 +112,26 @@ void loop(void)
   check_power_source();
 }
 
+void read_button()
+{
+  switch(button.updateState()){
+    case BUTTON::STATE_RELEASED_SP:
+      short_press();
+      break;
+    case BUTTON::STATE_PRESSED_LP:
+      if(!wait_for_lp_release) {
+        long_press();
+        wait_for_lp_release = true;
+      }
+      break; 
+    case BUTTON::STATE_RELEASED_LP:
+       wait_for_lp_release = false;
+       break;
+     default:
+       break;
+  }
+}
+
 void load_eeprom_settings()
 {
 #ifdef ENABLE_EEPROM_SETTINGS
@@ -129,7 +143,11 @@ void load_eeprom_settings()
     return;
   } 
 #endif
-  set_INA_range(INA219_RANGE_32V_3A);
+  current_ina_config.range = INA219::RANGE_32V;
+  current_ina_config.gain = INA219::GAIN_8_320MV;
+  current_ina_calibration.v_shunt_max = 0.32;
+  current_ina_calibration.v_bus_max = 32;
+  current_ina_calibration.i_bus_max_expected = 2.0;
 }
 
 void update_eeprom_settings()
@@ -167,37 +185,6 @@ void update_ina_config()
   ina219.calibrate(R_SHUNT, current_ina_calibration.v_shunt_max, current_ina_calibration.v_bus_max, current_ina_calibration.i_bus_max_expected);
   ina219.configure(current_ina_config.range, current_ina_config.gain, 
   current_ina_config.bus_adc, current_ina_config.shunt_adc, current_ina_config.mode );
-}
-
-void set_INA_range(uint8_t range)
-{
-  current_ina_range = range;
-  switch(range){
-    case INA219_RANGE_16V_400mA:
-      current_ina_config.range = INA219::RANGE_16V;
-      current_ina_config.gain = INA219::GAIN_1_40MV;
-      current_ina_calibration.v_shunt_max = 0.04;
-      current_ina_calibration.v_bus_max = 16;
-      current_ina_calibration.i_bus_max_expected = 0.4;
-      break;
-    case INA219_RANGE_32V_1A:
-      current_ina_config.range = INA219::RANGE_32V;
-      current_ina_config.gain = INA219::GAIN_8_320MV;
-      current_ina_calibration.v_shunt_max = 0.32;
-      current_ina_calibration.v_bus_max = 32;
-      current_ina_calibration.i_bus_max_expected = 1.0;
-      break;
-    case INA219_RANGE_32V_3A:
-    default:
-      current_ina_range = INA219_RANGE_32V_3A;
-      current_ina_config.range = INA219::RANGE_32V;
-      current_ina_config.gain = INA219::GAIN_8_320MV;
-      current_ina_calibration.v_shunt_max = 0.32;
-      current_ina_calibration.v_bus_max = 32;
-      current_ina_calibration.i_bus_max_expected = 2.0;
-      break;
-  }
-  update_ina_config();
 }
 
 void display_input_range()
@@ -393,37 +380,6 @@ void short_press()
   default:
     current_menu = MENU_MAIN;
     break;
-  }
-}
-
-void read_button()
-{
-  const int buttonState = digitalRead(BUTTON_PIN);
-  // check if the pushbutton is pressed.
-  if(buttonState == BUTTON_PRESSED_STATE) {
-    if(button_pressed == true) {
-      // Button is allready pressed.
-      // Check if button has been held for LONG_PRESS_DURATION.
-      if(!wait_for_button_release && (button_pressed_start + LONG_PRESS_DURATION < currentMillis)) {
-        wait_for_button_release = true;
-        long_press();
-      }
-  } else {
-      // New button press.
-      button_pressed_start = currentMillis;
-      button_pressed = true;
-    }
-  } else {
-    if(button_pressed == true)
-    {
-      // Button has just been released.
-      // Don't trigger short press if long press was just released.
-      if(!wait_for_button_release){ 
-        short_press();
-      }
-    }
-    wait_for_button_release = false;
-    button_pressed = false;
   }
 }
 
