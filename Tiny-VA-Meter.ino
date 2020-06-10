@@ -24,7 +24,7 @@ enum {
 };
 #endif
 
-enum {
+enum t_menu_pages{
   MENU_MAIN,
   MENU_VA,
   MENU_P,
@@ -40,34 +40,39 @@ enum {
   INA219_RANGE_16V_400mA = 2
 };
 
-#define POWER_SELECT_PIN 6        // Indicator input for USB or input power
+enum t_button_state {
+  STATE_NONE = 0,
+  STATE_PRESSED,
+  STATE_PRESSED_LONG,
+};
+
+#define POWER_SELECT_PIN 6          // Indicator input for USB or input power
 #define BUTTON_PIN 2
-#define BUTTON_PRESSED_STATE HIGH // Active state for button
-#define USB_POWER_INPUT_STATE HIGH // Input pin state for USB powered
-#define LONG_PRESS_DURATION 1000  // ms.
+#define BUTTON_PRESSED HIGH         // Active state for button
+#define USB_POWER_INPUT_STATE HIGH  // Input pin state for USB powered
+#define LONG_PRESS_DURATION 1000    // ms.
 #define SEC_PR_HOUR 3600
 
 Adafruit_INA219 ina219;
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA);
 
-bool button_pressed = false;
-bool wait_for_button_release = false;
 bool sensor_sleep = false;
 bool serial_auto_send = true;
-unsigned long button_pressed_start = 0;
 unsigned long currentMillis = 0;
 unsigned long last_refresh = 0;
 unsigned long refresh_rate = 200;
-uint8_t current_menu = MENU_MAIN;
+t_menu_pages current_menu = MENU_MAIN;
 uint8_t current_ina_range = INA219_RANGE_32V_3A;
-float mAh = 0;
 int power_select_known_state = 0;
 unsigned long power_select_change_time = 0;
+float mAh = 0;
 float shuntvoltage = 0;
 float busvoltage = 0;
 float current_mA = 0;
 float loadvoltage= 0;
 float power_mw = 0;
+t_button_state button_state;
+unsigned long button_pressed_start = 0;
 
 void setup(void) 
 {
@@ -115,21 +120,11 @@ void update_eeprom_settings()
 {
 #ifdef ENABLE_EEPROM_SETTINGS
   // Only write new values. Eeprom has a limited number of write operations.
-    if(EEPROM.read(EEPROM_VALIDATION_ADDR) != EEPROM_SETTINGS_VALID){
-      EEPROM.write(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
-    }
-    if(EEPROM.read(EEPROM_INA_RANGE_ADDR) != current_ina_range){
-      EEPROM.write(EEPROM_INA_RANGE_ADDR, current_ina_range);
-    }
-    if(EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != (uint8_t)sensor_sleep){
-      EEPROM.write(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
-    }
-    if(EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) != (refresh_rate >> 8) & 0xFF){
-      EEPROM.write(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
-    }
-    if(EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR) != refresh_rate & 0xFF){
-      EEPROM.write(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
-    }
+      EEPROM.update(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
+      EEPROM.update(EEPROM_INA_RANGE_ADDR, current_ina_range);
+      EEPROM.update(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
+      EEPROM.update(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
+      EEPROM.update(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
 #endif
 }
 
@@ -310,32 +305,31 @@ void short_press()
 
 void read_button()
 {
-  const int buttonState = digitalRead(BUTTON_PIN);
-  // check if the pushbutton is pressed.
-  if(buttonState == BUTTON_PRESSED_STATE) {
-    if(button_pressed == true) {
-      // Button is allready pressed.
-      // Check if button has been held for LONG_PRESS_DURATION.
-      if(!wait_for_button_release && (button_pressed_start + LONG_PRESS_DURATION < currentMillis)) {
-        wait_for_button_release = true;
-        long_press();
-      }
-  } else {
-      // New button press.
+  const int buttonRead = digitalRead(BUTTON_PIN);
+  
+  switch(button_state) {
+  case STATE_NONE:
+    if(buttonRead == BUTTON_PRESSED) {
+      button_state = STATE_PRESSED;
       button_pressed_start = currentMillis;
-      button_pressed = true;
     }
-  } else {
-    if(button_pressed == true)
-    {
-      // Button has just been released.
-      // Don't trigger short press if long press was just released.
-      if(!wait_for_button_release){ 
-        short_press();
+    break;
+  case STATE_PRESSED:
+    if(buttonRead == BUTTON_PRESSED) {
+      if(button_pressed_start + LONG_PRESS_DURATION < currentMillis) {
+          button_state = STATE_PRESSED_LONG;
+          long_press();
       }
+    } else {
+      button_state = STATE_NONE;
+      short_press();
     }
-    wait_for_button_release = false;
-    button_pressed = false;
+    break;
+  case STATE_PRESSED_LONG:
+    if(buttonRead != BUTTON_PRESSED) {
+      button_state = STATE_NONE;
+    }
+    break;
   }
 }
 
