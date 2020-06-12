@@ -67,8 +67,8 @@ INA219 ina219;
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA);
 BUTTON button(BUTTON_PIN, true, BUTTON_PRESSED_STATE, LONG_PRESS_DURATION, DEBOUNCE_DURATION);
 
-Ina_config_settings current_ina_config;
-Ina_calibration_settings current_ina_calibration;
+Ina_config_settings ina_config;
+Ina_calibration_settings ina_calib;
 
 bool sensor_sleep = false;
 bool serial_auto_send = true;
@@ -134,21 +134,21 @@ void read_button()
 
 void load_settings()
 {
-  current_ina_config.mode = INA219::CONT_SH_BUS;
+  ina_config.mode = INA219::CONT_SH_BUS;
 #ifdef ENABLE_EEPROM_SETTINGS
   if(EEPROM.read(EEPROM_VALIDATION_ADDR) == EEPROM_SETTINGS_VALID){
     set_voltage_range((INA219::t_range)EEPROM.read(EEPROM_INA_RANGE_V_ADDR));
     set_current_range((INA219::t_gain)EEPROM.read(EEPROM_INA_RANGE_I_ADDR));
-    current_ina_config.shunt_adc = (INA219::t_adc)EEPROM.read(EEPROM_INA_AVERAGING_ADDR);
-    current_ina_config.bus_adc = current_ina_config.shunt_adc;
+    ina_config.shunt_adc = (INA219::t_adc)EEPROM.read(EEPROM_INA_AVERAGING_ADDR);
+    ina_config.bus_adc = ina_config.shunt_adc;
     sensor_sleep = EEPROM.read(EEPROM_SENSOR_SLEEP_ADDR) != 0;    
     refresh_rate = (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_H_ADDR) << 8;
     refresh_rate += (unsigned long)EEPROM.read(EEPROM_REFRESH_RATE_L_ADDR); 
     return;
   } 
 #endif
-  current_ina_config.bus_adc = INA219::ADC_12BIT;
-  current_ina_config.shunt_adc = INA219::ADC_12BIT;
+  ina_config.bus_adc = INA219::ADC_12BIT;
+  ina_config.shunt_adc = INA219::ADC_12BIT;
   set_voltage_range(INA219::RANGE_32V);
   set_current_range(INA219::GAIN_8_320MV);
 }
@@ -158,9 +158,9 @@ void update_eeprom_settings()
 #ifdef ENABLE_EEPROM_SETTINGS
   // Only write new values. Eeprom has a limited number of write operations.
   EEPROM.update(EEPROM_VALIDATION_ADDR, EEPROM_SETTINGS_VALID);
-  EEPROM.update(EEPROM_INA_RANGE_V_ADDR, current_ina_config.range);  
-  EEPROM.update(EEPROM_INA_RANGE_I_ADDR, current_ina_config.gain);
-  EEPROM.update(EEPROM_INA_AVERAGING_ADDR, current_ina_config.shunt_adc);
+  EEPROM.update(EEPROM_INA_RANGE_V_ADDR, ina_config.range);  
+  EEPROM.update(EEPROM_INA_RANGE_I_ADDR, ina_config.gain);
+  EEPROM.update(EEPROM_INA_AVERAGING_ADDR, ina_config.shunt_adc);
   EEPROM.update(EEPROM_SENSOR_SLEEP_ADDR, (uint8_t)sensor_sleep);
   EEPROM.update(EEPROM_REFRESH_RATE_H_ADDR, (refresh_rate >> 8) & 0xFF);
   EEPROM.update(EEPROM_REFRESH_RATE_L_ADDR, refresh_rate & 0xFF);
@@ -177,9 +177,9 @@ void check_power_source()
 
 void update_ina_config()
 {
-  ina219.calibrate(R_SHUNT, current_ina_calibration.v_shunt_max, current_ina_calibration.v_bus_max, current_ina_calibration.i_bus_max_expected);
-  ina219.configure(current_ina_config.range, current_ina_config.gain, 
-  current_ina_config.bus_adc, current_ina_config.shunt_adc, current_ina_config.mode );
+  ina219.calibrate(R_SHUNT, ina_calib.v_shunt_max, ina_calib.v_bus_max, ina_calib.i_bus_max_expected);
+  ina219.configure(ina_config.range, ina_config.gain, 
+  ina_config.bus_adc, ina_config.shunt_adc, ina_config.mode );
 }
 
 void display_input_range()
@@ -234,7 +234,7 @@ void display_settings()
   }  
 #ifdef ENABLE_SETTINGS_OVERVIEW
     String rate = "Refresh rate: " + String(refresh_rate) + " ms";
-    String text = "Sensor range: " + String(current_ina_calibration.v_bus_max,0) + "V & " + String(current_ina_calibration.i_bus_max_expected,1) + "A";
+    String text = "Sensor range: " + String(ina_calib.v_bus_max,0) + "V & " + String(ina_calib.i_bus_max_expected,1) + "A";
     u8g2.setFont(u8g2_font_5x7_tf);
     u8g2.drawStr(0,46, text.c_str());
     if(sensor_sleep) {
@@ -249,29 +249,29 @@ void display_settings()
 
 void set_voltage_range(INA219::t_range range)
 {
-  current_ina_config.range = range;
+  ina_config.range = range;
   if(range == INA219::RANGE_32V) {
-    current_ina_calibration.v_bus_max = 32;
+    ina_calib.v_bus_max = 32;
   } else {
-    current_ina_calibration.v_bus_max = 16;
+    ina_calib.v_bus_max = 16;
   }
 }
 
 void set_current_range(INA219::t_gain gain)
 {
-  current_ina_config.gain = gain;
-    if(current_ina_config.gain == INA219::GAIN_1_40MV)  {
-      current_ina_calibration.v_shunt_max = 0.04;
-      current_ina_calibration.i_bus_max_expected = 0.4;
-    } else if(current_ina_config.gain == INA219::GAIN_2_80MV)  {
-      current_ina_calibration.v_shunt_max = 0.08;
-      current_ina_calibration.i_bus_max_expected = 0.8;
-    } else if(current_ina_config.gain == INA219::GAIN_4_160MV)  {
-      current_ina_calibration.v_shunt_max = 0.16;
-      current_ina_calibration.i_bus_max_expected = 1.6;
+  ina_config.gain = gain;
+    if(ina_config.gain == INA219::GAIN_1_40MV)  {
+      ina_calib.v_shunt_max = 0.04;
+      ina_calib.i_bus_max_expected = 0.4;
+    } else if(ina_config.gain == INA219::GAIN_2_80MV)  {
+      ina_calib.v_shunt_max = 0.08;
+      ina_calib.i_bus_max_expected = 0.8;
+    } else if(ina_config.gain == INA219::GAIN_4_160MV)  {
+      ina_calib.v_shunt_max = 0.16;
+      ina_calib.i_bus_max_expected = 1.6;
     } else {
-      current_ina_calibration.v_shunt_max = 0.320;
-      current_ina_calibration.i_bus_max_expected = 3.2;
+      ina_calib.v_shunt_max = 0.320;
+      ina_calib.i_bus_max_expected = 3.2;
     }
 }
 
@@ -290,33 +290,33 @@ void long_press()
     current_menu = MENU_SETTINGS_RANGE_V;
     break;
   case MENU_SETTINGS_RANGE_V:
-    if(current_ina_config.range == INA219::RANGE_16V) {
+    if(ina_config.range == INA219::RANGE_16V) {
       set_voltage_range(INA219::RANGE_32V);
     } else {
       set_voltage_range(INA219::RANGE_16V);
     }
     break;
   case MENU_SETTINGS_RANGE_I:
-    if(current_ina_config.gain == INA219::GAIN_1_40MV)  {
+    if(ina_config.gain == INA219::GAIN_1_40MV)  {
       set_current_range(INA219::GAIN_2_80MV);
-    } else if(current_ina_config.gain == INA219::GAIN_2_80MV)  {
+    } else if(ina_config.gain == INA219::GAIN_2_80MV)  {
       set_current_range(INA219::GAIN_4_160MV);
-    } else if(current_ina_config.gain == INA219::GAIN_4_160MV)  {
+    } else if(ina_config.gain == INA219::GAIN_4_160MV)  {
       set_current_range(INA219::GAIN_8_320MV);
     } else {
       set_current_range(INA219::GAIN_1_40MV);
     } 
     break;
   case MENU_SETTINGS_AVERAGING:
-    if(current_ina_config.shunt_adc == INA219::ADC_128SAMP) {
-      current_ina_config.shunt_adc = INA219::ADC_12BIT;
-    } else if(current_ina_config.shunt_adc == INA219::ADC_12BIT) {
-      current_ina_config.shunt_adc = INA219::ADC_2SAMP;
+    if(ina_config.shunt_adc == INA219::ADC_128SAMP) {
+      ina_config.shunt_adc = INA219::ADC_12BIT;
+    } else if(ina_config.shunt_adc == INA219::ADC_12BIT) {
+      ina_config.shunt_adc = INA219::ADC_2SAMP;
     } else {
-      uint8_t current = current_ina_config.shunt_adc + 1;
-      current_ina_config.shunt_adc = (INA219::t_adc)current;
+      uint8_t current = ina_config.shunt_adc + 1;
+      ina_config.shunt_adc = (INA219::t_adc)current;
     }
-    current_ina_config.bus_adc = current_ina_config.shunt_adc;
+    ina_config.bus_adc = ina_config.shunt_adc;
     break;
   case MENU_SETTINGS_REFRESH:
     if(refresh_rate == 100) {
@@ -332,7 +332,7 @@ void long_press()
   case MENU_SETTINGS_SLEEP:
     sensor_sleep = !sensor_sleep;
     if(!sensor_sleep){
-      current_ina_config.mode = INA219::CONT_SH_BUS;
+      ina_config.mode = INA219::CONT_SH_BUS;
     }
     break;
   default:
@@ -384,7 +384,7 @@ void update_screen()
     last_refresh += refresh_rate;
   
     if(sensor_sleep) {
-      current_ina_config.mode = INA219::CONT_SH_BUS;
+      ina_config.mode = INA219::CONT_SH_BUS;
       update_ina_config();
       delay(2); // Allow sensor boot < 1 ms.
     }
@@ -396,7 +396,7 @@ void update_screen()
     power_mw = ina219.busPower()*1000;
 
     if(sensor_sleep) {
-      current_ina_config.mode = INA219::PWR_DOWN;
+      ina_config.mode = INA219::PWR_DOWN;
       update_ina_config();
     }
 
@@ -436,23 +436,23 @@ void update_screen()
       break;
     case MENU_SETTINGS_RANGE_V:
     {
-       String volt = String(current_ina_calibration.v_bus_max,0) + " V";
+       String volt = String(ina_calib.v_bus_max,0) + " V";
        print_two_lines("Range Volt", volt.c_str());
     }   
        break;
     case MENU_SETTINGS_RANGE_I:
     {
-       String amp = String(current_ina_calibration.i_bus_max_expected,1) + " A";
+       String amp = String(ina_calib.i_bus_max_expected,1) + " A";
        print_two_lines("Range Amp", amp.c_str());
     }   
       break;
     case MENU_SETTINGS_AVERAGING:
     {
       String number;
-      if(current_ina_config.shunt_adc < INA219::ADC_2SAMP) {
+      if(ina_config.shunt_adc < INA219::ADC_2SAMP) {
         number = "Off";
       } else {
-        uint8_t samlpes = 1 << ((uint8_t)current_ina_config.shunt_adc - 8);
+        uint8_t samlpes = 1 << ((uint8_t)ina_config.shunt_adc - 8);
         number = String(samlpes) + " samples";
       }
       print_two_lines("Averaging", number.c_str());
