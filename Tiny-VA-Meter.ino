@@ -220,6 +220,16 @@ void print_two_lines(const char* line1, const char* line2)
   } while ( u8g2.nextPage() );
 }
 
+String parseFloatTextWithUnit(float value, uint8_t decimals, const char* unit)
+{
+  return String(value, decimals) + unit;
+}
+
+String parseTextFloatAndUnit(const char* text, float value, uint8_t decimals, const char* unit)
+{
+  return text + String(value, decimals) + unit;
+}
+
 void display_settings()
 {
   u8g2.firstPage();
@@ -233,7 +243,6 @@ void display_settings()
     u8g2.drawXBMP(30, 22, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);     
   }  
 #ifdef ENABLE_SETTINGS_OVERVIEW
-    String rate = "Refresh rate: " + String(refresh_rate) + " ms";
     String text = "Sensor range: " + String(ina_calib.v_bus_max,0) + "V & " + String(ina_calib.i_bus_max_expected,1) + "A";
     u8g2.setFont(u8g2_font_5x7_tf);
     u8g2.drawStr(0,46, text.c_str());
@@ -242,7 +251,7 @@ void display_settings()
     } else {
       u8g2.drawStr(0,54, "Sensor sleep: Disabled");
     }   
-    u8g2.drawStr(0,62, rate.c_str());
+    u8g2.drawStr(0,62, parseTextFloatAndUnit("Refresh rate: ", refresh_rate, 0, " ms").c_str());
 #endif
   } while ( u8g2.nextPage() );
 }
@@ -417,18 +426,12 @@ void update_screen()
       break;
     case MENU_VA: // Display voltage and amps
     {
-      String volt = String(loadvoltage) + " V";
-      String amp = String(current_mA, 1) + " mA";
-      print_two_lines(volt.c_str(), amp.c_str());
+      print_two_lines(parseFloatTextWithUnit(loadvoltage, 2, " V").c_str(), parseFloatTextWithUnit(current_mA, 1, " mA").c_str());
     }
       break;
     case MENU_P: // Display voltage, amps, watt and Ah
     {
-      String volt = String(loadvoltage) + " V";
-      String amp = String(current_mA, 1) + " mA";
-      String power = String(power_mw) + " mW";
-      String ampHours = String(mAh, 1) + " mAh";
-      print_four_lines(volt.c_str(), amp.c_str(), power.c_str(), ampHours.c_str());
+      print_four_lines(parseFloatTextWithUnit(loadvoltage, 2, " V").c_str(), parseFloatTextWithUnit(current_mA, 1, " mA").c_str(), parseFloatTextWithUnit(power_mw, 2, " mV").c_str(), parseFloatTextWithUnit(mAh, 1, " mAh").c_str());
     }
       break;
     case MENU_SETTINGS_ENTER:
@@ -436,14 +439,12 @@ void update_screen()
       break;
     case MENU_SETTINGS_RANGE_V:
     {
-       String volt = String(ina_calib.v_bus_max,0) + " V";
-       print_two_lines("Range Volt", volt.c_str());
+       print_two_lines("Range Volt", parseFloatTextWithUnit(ina_calib.v_bus_max, 0, " V").c_str());
     }   
        break;
     case MENU_SETTINGS_RANGE_I:
     {
-       String amp = String(ina_calib.i_bus_max_expected,1) + " A";
-       print_two_lines("Range Amp", amp.c_str());
+       print_two_lines("Range Amp", parseFloatTextWithUnit(ina_calib.i_bus_max_expected, 1, " A").c_str());
     }   
       break;
     case MENU_SETTINGS_AVERAGING:
@@ -452,16 +453,15 @@ void update_screen()
       if(ina_config.shunt_adc < INA219::ADC_2SAMP) {
         number = "Off";
       } else {
-        uint8_t samlpes = 1 << ((uint8_t)ina_config.shunt_adc - 8);
-        number = String(samlpes) + " samples";
+        uint8_t samples = 1 << ((uint8_t)ina_config.shunt_adc - 8);
+        number = parseFloatTextWithUnit(samples, 0, " sampels");
       }
       print_two_lines("Averaging", number.c_str());
     } 
       break;
     case MENU_SETTINGS_REFRESH: // Display active refresh rate
       {
-        String rate = String(refresh_rate) + " ms";
-        print_two_lines("Refresh rate", rate.c_str());
+        print_two_lines("Refresh rate", parseFloatTextWithUnit(refresh_rate, 0, " ms").c_str());
       }
       break;
     case MENU_SETTINGS_SLEEP: // Display active sensor sleep setting
