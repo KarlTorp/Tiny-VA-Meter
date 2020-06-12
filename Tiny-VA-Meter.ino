@@ -6,7 +6,7 @@
 // Using ArduinoINA219 fork from KarlTorp GitHub
 #include <INA219.h>
 
-//#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
+#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
 #define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
 #define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
 
@@ -187,13 +187,13 @@ void display_input_range()
   u8g2.firstPage();
   u8g2.setFont(u8g2_font_ncenB14_tr);
   do {
-    u8g2.drawStr(0,32,"Input range:");
+    u8g2.drawStr(0,32, getFlashString(TXT_INPUT_RANGE));
     if(power_select_known_state == USB_POWER_INPUT_STATE)  {
       u8g2.drawXBMP(46, 2, USB_icon_width, USB_icon_height, USB_icon_bits);
-      u8g2.drawStr(0,56,"0-26V 3.2A");
+      u8g2.drawStr(0,56,getFlashString(TXT_JACK_RANGE));
     } else {
       u8g2.drawXBMP(30, 2, power_jack_icon_width, power_jack_icon_height, power_jack_icon_bits);
-      u8g2.drawStr(0,56,"4-15V 3.2A");     
+      u8g2.drawStr(0,56,getFlashString(TXT_USB_RANGE));     
     }
   } while ( u8g2.nextPage() );
 }
@@ -235,7 +235,7 @@ void display_settings()
   u8g2.firstPage();
   do {
     u8g2.setFont(u8g2_font_ncenB14_tr);
-    u8g2.drawStr(22,16,"Settings");
+    u8g2.drawStr(22, 16, getFlashString(TXT_SETTINGS));
 
   if(power_select_known_state == USB_POWER_INPUT_STATE) {
     u8g2.drawXBMP(46, 22, USB_icon_width, USB_icon_height, USB_icon_bits);
@@ -246,11 +246,13 @@ void display_settings()
     String text = "Sensor range: " + String(ina_calib.v_bus_max,0) + "V & " + String(ina_calib.i_bus_max_expected,1) + "A";
     u8g2.setFont(u8g2_font_5x7_tf);
     u8g2.drawStr(0,46, text.c_str());
+    String sleep_text = getFlashString(TEXT_SENSOR_SLEEP);
     if(sensor_sleep) {
-      u8g2.drawStr(0,54, "Sensor sleep: Enabled");
+      sleep_text += ": Enabled";
     } else {
-      u8g2.drawStr(0,54, "Sensor sleep: Disabled");
+      sleep_text += ": Disabled";
     }   
+    u8g2.drawStr(0,54, sleep_text.c_str());
     u8g2.drawStr(0,62, parseTextFloatAndUnit("Refresh rate: ", refresh_rate, 0, " ms").c_str());
 #endif
   } while ( u8g2.nextPage() );
@@ -466,9 +468,9 @@ void update_screen()
       break;
     case MENU_SETTINGS_SLEEP: // Display active sensor sleep setting
       if(sensor_sleep) {
-        print_two_lines("Sensor sleep", "Enabled");
+        print_two_lines(getFlashString(TEXT_SENSOR_SLEEP), "Enabled");
       } else {
-        print_two_lines("Sensor sleep", "Disabled");
+        print_two_lines(getFlashString(TEXT_SENSOR_SLEEP), "Disabled");
       }
       break;
     default:
@@ -511,12 +513,34 @@ void receive_serial()
       refresh_rate = 500;
     } else if(command.equals("refresh 1000")) {
       refresh_rate = 1000;
-    } else if(command.equals("range 0")) {
-      set_INA_range(INA219_RANGE_32V_3A);
-    } else if(command.equals("range 1")) {
-      set_INA_range(INA219_RANGE_32V_1A);
-    } else if(command.equals("range 2")) {
-      set_INA_range(INA219_RANGE_16V_400mA);
+    } else if(command.equals("volt 16")) {
+      set_voltage_range(INA219::RANGE_16V);
+    } else if(command.equals("volt 32")) {
+      set_voltage_range(INA219::RANGE_32V);
+    } else if(command.equals("gain 1")) {
+      set_current_range(INA219::GAIN_1_40MV);
+    } else if(command.equals("gain 2")) {
+      set_current_range(INA219::GAIN_2_80MV);
+    } else if(command.equals("gain 4")) {
+      set_current_range(INA219::GAIN_4_160MV);
+    } else if(command.equals("gain 8")) {
+      set_current_range(INA219::GAIN_8_320MV);
+    } else if(command.equals("avg 0")) {
+      ina_config.shunt_adc = INA219::ADC_12BIT;
+    } else if(command.equals("avg 2")) {
+      ina_config.shunt_adc = INA219::ADC_2SAMP;
+    } else if(command.equals("avg 4")) {
+      ina_config.shunt_adc = INA219::ADC_4SAMP;
+    } else if(command.equals("avg 8")) {
+      ina_config.shunt_adc = INA219::ADC_8SAMP;
+    } else if(command.equals("avg 16")) {
+      ina_config.shunt_adc = INA219::ADC_16SAMP;
+    } else if(command.equals("avg 32")) {
+      ina_config.shunt_adc = INA219::ADC_32SAMP;
+    } else if(command.equals("avg 64")) {
+      ina_config.shunt_adc = INA219::ADC_64SAMP;
+    } else if(command.equals("avg 128")) {
+      ina_config.shunt_adc = INA219::ADC_128SAMP;
     } else if(command.equals("log off")) {
       serial_auto_send = false;
     } else if(command.equals("log on")) {
@@ -530,10 +554,13 @@ void receive_serial()
       Serial.println(getFlashString(TXT_TERMINAL_HELP_LOG));
       Serial.println(getFlashString(TXT_TERMINAL_HELP_SLEEP));
       Serial.println(getFlashString(TXT_TERMINAL_HELP_REFRESH));
-      Serial.println(getFlashString(TXT_TERMINAL_HELP_RANGE));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_RANGE_V));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_RANGE_I));
+      Serial.println(getFlashString(TXT_TERMINAL_HELP_AVG));
       return;
     }
     Serial.println("OK");
+    update_ina_config();
     update_eeprom_settings();
   }
 #endif
