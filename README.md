@@ -1,12 +1,15 @@
 # Tiny-VA-Meter
 Compact Volt / Amp meter  using Arduino nano, a 128x64 OLED display and the INA219 high side current sensor.
 
+![picture](pictures/IMG_4740.JPG)
+
 Single button interface with short/long press.
 
 Features:
 - Display voltage, current, watt and mAh
 - Calculates mAh with manual reset.
-- Select INA219 ranges 32V/3.2A, 32V/1A or 16V/0.4A
+- Select INA219 ranges 32V/16V and 3.2A, 1.6A, 0.8A or 0.4A.
+- Select INA219 averaging 1 to 128 samples 
 - Select sampling rate 100, 200, 500 or 1000 ms.
 - Enable/disable sensor sleep to lower leak current in sensor.
 - Settings are stored in EEPROM and reloaded on boot
