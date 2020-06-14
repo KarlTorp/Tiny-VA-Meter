@@ -26,7 +26,7 @@ enum {
 };
 #endif
 
-enum {
+enum t_menu_pages {
   MENU_MAIN,
   MENU_VA,
   MENU_P,
@@ -351,6 +351,7 @@ void long_press()
   update_ina_config();
   update_eeprom_settings();
 }
+
 void short_press()
 {
   switch(current_menu) {
