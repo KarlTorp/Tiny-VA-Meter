@@ -1,4 +1,3 @@
-// Using Arduino 1.8.10
 #include <Arduino.h>
 #include <Wire.h>
 // Using U8g2 2.24.3
@@ -6,9 +5,9 @@
 // Using ArduinoINA219 fork from KarlTorp GitHub
 #include <INA219.h>
 
-#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 2.7KB(9%) Flash & 330B(16%) RAM. 
-#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 420B(1%) Flash.
-#define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.1KB(7%) Flash & 58B(2%) RAM. 
+#define ENABLE_TERMINAL 1 // Comment in to disable serial communication. Removes use of serial. Free 3.9KB(13%) Flash & 500B(25%) RAM. 
+#define ENABLE_EEPROM_SETTINGS 1 // Comment in to disable eeprom settings. Free 346B(1%) Flash.
+#define ENABLE_SETTINGS_OVERVIEW 1 // Comment in to disable mini settings overwiew. Removes use of one font. Free 2.2KB(7%) Flash
 
 #include "FlashMem.h"
 #include "button.hpp"
@@ -53,7 +52,6 @@ struct Ina_calibration_settings {
   float i_bus_max_expected;
 };
                 
-
 #define POWER_SELECT_PIN 6        // Indicator input for USB or input power
 #define BUTTON_PIN 2
 #define BUTTON_PRESSED_STATE HIGH // Active state for button
@@ -77,14 +75,14 @@ unsigned long currentMillis = 0;
 unsigned long last_refresh = 0;
 unsigned long refresh_rate = 200;
 uint8_t current_menu = MENU_MAIN;
-float mAh = 0;
 int power_select_known_state = 0;
 unsigned long power_select_change_time = 0;
 float shuntvoltage = 0;
 float busvoltage = 0;
 float current_mA = 0;
-float loadvoltage= 0;
+float loadvoltage = 0;
 float power_mw = 0;
+float mAh = 0;
 
 void setup(void) 
 {
@@ -182,6 +180,16 @@ void update_ina_config()
   ina_config.bus_adc, ina_config.shunt_adc, ina_config.mode );
 }
 
+String parseFloatTextWithUnit(float value, uint8_t decimals, const char* unit)
+{
+  return String(value, decimals) + unit;
+}
+
+String parseTextFloatAndUnit(const char* text, float value, uint8_t decimals, const char* unit)
+{
+  return text + String(value, decimals) + unit;
+}
+
 void display_input_range()
 {  
   u8g2.firstPage();
@@ -218,16 +226,6 @@ void print_two_lines(const char* line1, const char* line2)
     u8g2.drawStr(0,24,line1);
     u8g2.drawStr(0,52,line2);
   } while ( u8g2.nextPage() );
-}
-
-String parseFloatTextWithUnit(float value, uint8_t decimals, const char* unit)
-{
-  return String(value, decimals) + unit;
-}
-
-String parseTextFloatAndUnit(const char* text, float value, uint8_t decimals, const char* unit)
-{
-  return text + String(value, decimals) + unit;
 }
 
 void display_settings()
@@ -357,34 +355,18 @@ void short_press()
 {
   switch(current_menu) {
   case MENU_MAIN:
+  case MENU_SETTINGS_SLEEP:
+  case MENU_SETTINGS_ENTER:
+  default:
     current_menu = MENU_VA;
     break;
   case MENU_VA:
-    current_menu = MENU_P;
-    break;
   case MENU_P:
-    current_menu = MENU_SETTINGS_ENTER;
-    break;
-  case MENU_SETTINGS_ENTER:
-    current_menu = MENU_VA;
-    break;
   case MENU_SETTINGS_RANGE_V:
-    current_menu = MENU_SETTINGS_RANGE_I;
-    break;
   case MENU_SETTINGS_RANGE_I:
-    current_menu = MENU_SETTINGS_AVERAGING;
-    break;
   case MENU_SETTINGS_AVERAGING:
-    current_menu = MENU_SETTINGS_REFRESH;
-    break;
   case MENU_SETTINGS_REFRESH:
-    current_menu = MENU_SETTINGS_SLEEP;
-    break;
-  case MENU_SETTINGS_SLEEP:
-    current_menu = MENU_VA;
-    break;
-  default:
-    current_menu = MENU_MAIN;
+    current_menu++;
     break;
   }
 }
