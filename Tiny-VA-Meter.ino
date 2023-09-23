@@ -416,7 +416,7 @@ void update_screen()
       break;
     case MENU_P: // Display voltage, amps, watt and Ah
     {
-      print_four_lines(parseFloatTextWithUnit(loadvoltage, 2, " V").c_str(), parseFloatTextWithUnit(current_mA, 1, " mA").c_str(), parseFloatTextWithUnit(power_mw, 2, " mV").c_str(), parseFloatTextWithUnit(mAh, 1, " mAh").c_str());
+      print_four_lines(parseFloatTextWithUnit(loadvoltage, 2, " V").c_str(), parseFloatTextWithUnit(current_mA, 1, " mA").c_str(), parseFloatTextWithUnit(power_mw, 2, " mW").c_str(), parseFloatTextWithUnit(mAh, 1, " mAh").c_str());
     }
       break;
     case MENU_SETTINGS_ENTER:
